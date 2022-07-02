@@ -1,0 +1,467 @@
+---
+title: "Breast_Cancer"
+author: "Gayatri Krishna"
+date: '2022-06-05'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setting the working directory
+```{r}
+setwd("D:/St Josephs/PROJECTS/advanced stats")
+```
+
+# Packages
+```{r}
+library(tidyverse)
+library(ggcorrplot)
+library(lattice)
+library(psych)
+library(DataExplorer)
+library(car)
+library(caret)
+library(scales)
+library(modelr)
+library(broom)
+library(cowplot)
+library(corrplot)
+library(pROC)
+library(caTools)
+library(superml)
+library(ggplot2)
+library(GGally)
+library(rmarkdown)
+library(lattice)
+library(gclus)
+library(dplyr)
+library(plotly)
+library(MLmetrics)
+library(plotROC)
+library(caret)
+options(warn=-1)
+```
+
+
+# Importing the dataset 
+```{r}
+data <- read.csv("breast_cancer_data.csv")
+head(data)
+```
+
+# Making a  copy of the orginal dataset
+```{r}
+ori_data = data
+head(ori_data)
+glimpse(ori_data)
+```
+
+# Basic idea of the dataset
+```{r}
+dim(data)
+sum(is.na(data))
+str(data)
+```
+
+# EDA
+
+
+## 1. Count Based On Diagnosis
+```{r}
+tab1 <- table(data$diagnosis)
+tab1
+```
+## 2. Label encoding the caregiorical variable
+```{r}
+data$diagnosis <- factor(data$diagnosis, labels = c("Benign", "Malignant"))
+data <- data %>% select(everything()) 
+# change diagnosis to numeric between 0 & 1
+data$diagnosis <- as.numeric(data$diagnosis)-1
+str(data)
+head(data,10)
+table(data$diagnosis)
+str(data)
+```
+
+## 3. Relationship between the 10 mean attributes and the diagnosis variable
+```{r}
+c1 = data%>%select(diagnosis,radius_mean,texture_mean,perimeter_mean,area_mean,
+smoothness_mean,compactness_mean,concavity_mean,concave.points_mean,symmetry_mean,
+fractal_dimension_mean)
+head(c1,5)
+ggpairs(c1)
+```
+
+
+## 4. Relationship between the 10 sqaure attributes and the diagnosis variable
+```{r}
+c2 = data%>%select(diagnosis,radius_se,texture_se,perimeter_se,area_se,
+                   smoothness_se,compactness_se,concavity_se,concave.points_se,symmetry_se,
+                   fractal_dimension_se)
+head(c2,5)
+ggpairs(c2)
+```
+
+
+## 5. Relationship between the 10 worst attributes and the diagnosis variable
+```{r}
+c3 = data%>%select(diagnosis,radius_worst,texture_worst,perimeter_worst,area_worst,
+                   smoothness_worst,compactness_worst,concavity_worst,concave.points_worst,symmetry_worst,
+                   fractal_dimension_worst)
+head(c3,5)
+ggpairs(c3)
+```
+
+
+## 6. Correlation 
+```{r}
+cor <- cor(data)
+cols = c("diagnosis","radius_mean","texture_mean","perimeter_mean","area_mean",
+         "smoothness_mean","compactness_mean","concavity_mean",         
+         "concave_points_mean","symmetry_mean","fractal_dimension_mean",
+         "radius_se","texture_se","perimeter_se","area_se","smoothness_se",          
+         "compactness_se","concavity_se","concave_points_se","symmetry_se",            
+         "fractal_dimension_se","radius_worst","texture_worst",
+         "perimeter_worst","area_worst","smoothness_worst","compactness_worst",
+         "concavity_worst","concave_points_worst","symmetry_worst",         
+         "fractal_dimension_worst")
+
+cor <- as_tibble(reshape2::melt(cor, id = cols))
+# rename the columns appropriately
+colnames(cor) <- c("Target", "Variable", "Correlation")
+
+
+#pick the target variables 
+C <- cor[which(cor$Target == "diagnosis"),]
+C <- C[order(- abs(C$Correlation)), ]
+C <- subset(C, abs(C$Correlation) > 0.10)
+C
+```
+## 7. Corrplot
+```{r}
+corr <- round(cor(data), 1)
+ggcorrplot(corr,
+           hc.order = TRUE,
+           type = "upper",
+           lab = TRUE)
+```
+
+
+## 8. Multicollinearity 
+```{r}
+x <- subset(data, select = -c(diagnosis))
+mc <- cor(x)
+
+highlyCorrelated = findCorrelation(mc, cutoff=0.7)
+highlyCorCol = colnames(x)[highlyCorrelated]
+highlyCorCol
+
+fit1 <- lm(diagnosis ~., data = data);
+vif(fit1)
+
+
+data <- data[, -which(colnames(data) %in% highlyCorCol)]
+data %>% head(5)
+dim(data)
+str(data)
+```
+
+## 9. Finally the reduced data 
+```{r}
+plot_str(data)
+
+```
+
+## 10. Pie chart for the diagnosis
+```{r}
+tab2 <- prop.table(tab1)*100
+tab2.df <- as.data.frame(tab2)
+pielabels <- sprintf("%s - %3.1f%s",tab2.df[,1],tab2,"%")
+pie(tab2,labels = pielabels,clockwise = TRUE,col = c("blue4","chartreuse"),main = "Pie chart showing proportion of people suffering from M and B type cancer")
+```
+
+
+## 11. Distribution of each variable with respect to diagnosis
+```{r}
+
+#---- area mean-----
+ggplot(data, aes(x = area_mean)) +
+  geom_density(lwd = 3,fill = 'chartreuse') +
+  facet_wrap(~diagnosis)
+
+#------ texture mean----
+ggplot(data, aes(x = texture_mean)) +
+  geom_density(lwd = 3,fill = 'red') +
+  facet_wrap(~diagnosis)
+
+#----symmetry mean------
+ggplot(data, aes(x = symmetry_mean)) +
+  geom_density(lwd = 3,fill = 'blue4') +
+  facet_wrap(~diagnosis)
+
+#----texture se----
+ggplot(data, aes(x = texture_se)) +
+  geom_density(lwd = 3,fill = 'yellow') +
+  facet_wrap(~diagnosis)
+
+
+#----smoothness se----
+ggplot(data, aes(x = smoothness_se)) +
+  geom_density(lwd = 3,fill = '#009999') +
+  facet_wrap(~diagnosis)
+
+#----symmetry se----
+ggplot(data, aes(x = symmetry_se)) +
+  geom_density(lwd = 3,fill = 'pink3') +
+  facet_wrap(~diagnosis)
+
+#----fractal dimension se----
+ggplot(data, aes(x = fractal_dimension_se)) +
+  geom_density(lwd = 3,fill = 'tan1') +
+  facet_wrap(~diagnosis)
+
+
+#----smoothness worst----
+ggplot(data, aes(x = smoothness_worst)) +
+  geom_density(lwd = 3,fill = 'violetred') +
+  facet_wrap(~diagnosis)
+
+#-------symmetry worst-----
+ggplot(data, aes(x = symmetry_worst)) +
+  geom_density(lwd = 3,fill = 'plum') +
+  facet_wrap(~diagnosis)
+
+#-----fractal dimension worst----
+ggplot(data, aes(x = fractal_dimension_worst)) +
+  geom_density(lwd = 3,fill = 'lightcoral') +
+  facet_wrap(~diagnosis)
+```
+
+
+#Classification Algorithm 1:-Logistic Regression Model
+
+## 1. Spliting the data 
+```{r}
+split <- sample.split(data, SplitRatio = 0.8)
+split
+```
+
+## 2. Taking the 80% data
+```{r}
+train <- subset(data,split = TRUE)
+test <- subset(data,split = FALSE)
+```
+
+
+## 3. Model fitting
+```{r}
+CanDet <- glm(diagnosis~.,family = binomial,data = train)
+summary(CanDet)
+```
+
+
+
+
+
+## 4. Assessing Model Fit
+```{r}
+library(pscl)
+pscl::pR2(CanDet)["McFadden"]
+```
+## 5. Variable Importance
+```{r}
+caret::varImp(CanDet)
+```
+
+
+## 6. Use the Model to Make Predictions
+```{r}
+predicted <- predict(CanDet, test, type="response")
+```
+
+
+## 7. Sensitivity or true positive rate
+```{r}
+library(InformationValue)
+predicted <- predict(CanDet)
+sensitivity(data$diagnosis, predicted)
+```
+## Specificity or true negative rate
+```{r}
+specificity(data$diagnosis, predicted)
+```
+#total misclassification error rate
+```{r}
+misClassError(data$diagnosis, predicted, threshold=0.5)
+```
+
+#ROC
+```{r}
+plotROC(data$diagnosis, predicted)
+```
+## .Plots
+```{r}
+
+ggplot(data, aes(x=area_mean, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,
+                method.args = list(family=binomial))                              #yes
+
+ggplot(data, aes(x=texture_mean, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,
+                method.args = list(family=binomial))                              #yes
+
+ggplot(data, aes(x=symmetry_mean, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,
+                method.args = list(family=binomial))                                #yes
+           
+ggplot(data, aes(x=texture_se, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,
+                method.args = list(family=binomial))
+
+ggplot(data, aes(x=smoothness_se, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,
+                method.args = list(family=binomial))
+
+ggplot(data, aes(x=symmetry_se, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,
+                method.args = list(family=binomial))
+         
+ggplot(data, aes(x=fractal_dimension_se, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,
+                method.args = list(family=binomial))
+           
+ggplot(data, aes(x=smoothness_worst, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,                                
+                method.args = list(family=binomial))                                  #yes
+
+ggplot(data, aes(x=symmetry_worst, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,
+                method.args = list(family=binomial))                                  #yes
+
+ggplot(data, aes(x=fractal_dimension_worst, y=diagnosis)) + geom_point() +
+      stat_smooth(method="glm", color="green", se=FALSE,
+                method.args = list(family=binomial))  
+```
+
+
+
+
+#Classification Algorithm 2: Random Forest
+
+## 1. Let's have glimpse of our dataset
+```{r}
+glimpse(data)
+```
+## 2. Converting diagnosis into factors
+```{r}
+data <- transform(data,diagnosis=as.factor(diagnosis))
+sapply(data, class)
+```
+
+## 2. random forest 
+```{r}
+library(party)
+library(randomForest)
+rf <- randomForest(
+  diagnosis ~ .,
+  data=data)
+print(rf)
+```
+
+##3. plot the test MSE by number of trees
+```{r}
+plot(rf)
+#produce variable importance plot
+varImpPlot(rf) 
+```
+
+
+
+
+## 4. optimal mtry value
+```{r}
+#Select mtry value with minimum out of bag(OOB) error
+
+mtry <- tuneRF(data[-2],data$diagnosis, ntreeTry=500,
+               stepFactor=1.5,improve=0.01, trace=TRUE, plot=TRUE)
+best.m <- mtry[mtry[, 2] == min(mtry[, 2]), 1]
+print(mtry)
+print(best.m)
+```
+
+
+##5. Build model again using best mtry value.
+```{r}
+rf <-randomForest(diagnosis~.,data=data, mtry=best.m, importance=TRUE,ntree=500)
+print(rf)
+#Evaluate variable importance
+importance(rf)
+#Higher the value of mean decrease accuracy or mean decrease gini score , higher the importance of the variable in the model. In the plot shown above, Area_mean is most important variable.
+```
+
+##6. Prediction and Calculate Performance Metrics
+```{r}
+pred1=predict(rf,type = "prob")
+library(ROCR)
+perf = prediction(pred1[,2], data$diagnosis)
+```
+
+## 7.AUC 
+```{r}
+#Area under the curve
+auc = performance(perf, "auc")
+auc
+# 2. True Positive and Negative Rate
+pred3 = performance(perf, "tpr","fpr")
+# 3. Plot the ROC curve
+plotROC(test$diagnosis,pred1)
+```
+
+
+
+#Classification Algorithm 3:- Decision Tree
+
+
+## 1. libraries
+
+```{r}
+library(rpart)
+library(rpart.plot)
+```
+
+## 2. Decision Tree Diagram
+```{r}
+fit <- rpart(diagnosis~., data = train, method = 'class')
+rpart.plot(fit, extra = 106)
+```
+
+
+
+## 3. confusion metrix
+```{r}
+prevarbre=predict(fit,newdata=test,type="prob")
+previsions2=ifelse(prevarbre[,2]>0.5,"Yes","No")
+table(previsions2,test$diagnosis)
+```
+
+
+
+## 3. Accuracy
+```{r}
+CM_arbre<-table(prevarbre[,2]>0.5,test$diagnosis)
+accuracy_arbre=(sum(diag(CM_arbre)))/sum(CM_arbre)
+accuracy_arbre
+```
+
+## 4. roc plot
+```{r}
+plotROC(test$diagnosis,prevarbre[,2])
+```
+
+
+
+
+
+
